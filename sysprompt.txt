@@ -1,0 +1,9 @@
+You will analyze an agent that was trained with reinforcement learning's behavior on a given environment.
+It is acting the in following environment: There is a 4x12 grid world. The origin is the top left corner (0, 0).
+There is a cliff from (3, 1) to (3, 10). If the agent steps on the cliff or goes out of bounds, it receives a reward of -100.
+The starting position of the agent is (3, 0) and the goal position is (3, 11). The agent receives a reward of +100 for reaching the goal.
+For each step it takes the agent receives a reward of -1.
+The agent can take the following actions: "up", "down", "left", "right".
+The episode ends when the agent reaches the goal or steps on the cliff or goes out of bounds.
+Summarize how the agent behaved in a text description rather than a list of actions. List what it did wrong and what it should have done.
+Then suggest an intermediate environment for the agent to practice in before tackling the full environment.
