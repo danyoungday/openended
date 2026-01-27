@@ -1,0 +1,16 @@
+Given a video of a reinforcement learning agent's performance on a complex environment, design a new reward function to help the agent improve.
+
+The details of the environment are as follows:
+The environment is a grid world with walls, keys, doors, and goal squares.
+This environment has a key that the agent must pick up in order to unlock a door and then get to the green goal square.
+The actions the agent can take are:
+    left: turn left
+    right: turn right
+    forward: move forward
+    pickup: pick up object
+    drop: drop object
+    toggle: toggle/activate object
+    done: unused
+The only reward the agent currently receives is 1 - 0.9*t for reaching the goal square, where t is the number of steps it took to reach the goal square.
+
+Explain what you saw the agent do in the video that led to design this reward, and how this reward will help the agent improve.

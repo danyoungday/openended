@@ -1,6 +1,9 @@
 """
 Base Agent class for the other agents to inherit from.
 """
+import base64
+
+import cv2
 import openai
 
 
@@ -77,3 +80,32 @@ class LLMAgent():
 
         except Exception as e:
             return f"Error generating response: {str(e)}"
+        
+
+def format_video_input(video_path: str, frame_skip: int) -> list[dict]:
+    """
+    Takes in the path to a video file and formats it into how our agent expects video input.
+    """
+    # pylint: disable=no-member
+    video = cv2.VideoCapture(video_path)
+
+    base64Frames = []
+    while video.isOpened():
+        success, frame = video.read()
+        if not success:
+            break
+        _, buffer = cv2.imencode(".jpg", frame)
+        base64Frames.append(base64.b64encode(buffer).decode("utf-8"))
+
+    # pylint: enable=no-member
+
+    video.release()
+    print(len(base64Frames), "frames read.")
+    openai_input = [
+        {
+            "type": "image_url",
+            "image_url": {"url": f"data:image/jpeg;base64,{frame}"}
+        }
+        for frame in base64Frames[0::frame_skip]
+    ]
+    return openai_input
