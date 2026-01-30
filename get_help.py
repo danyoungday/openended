@@ -4,7 +4,7 @@ import gymnasium as gym
 from stable_baselines3.common.env_util import make_vec_env
 
 from llm import LLMAgent, format_video_input
-from train_agent import AgentTrainer, visualize_agent, MiniWrapper
+from train_agent import AgentTrainer, MiniWrapper
 
 
 def create_wrapper(video_path: str, behavior_agent: LLMAgent, reward_agent: LLMAgent, frame_skip: int = 10) -> str:
@@ -78,9 +78,9 @@ def main():
 
     agent.save("models/modified")
 
-    vis_env = gym.make("MiniGrid-DoorKey-5x5-v0", render_mode="rgb_array")
-    vis_env = MiniWrapper(vis_env, custom_wrapper=new_wrapper)
-    visualize_agent(agent, vis_env, save_prefix="minigrid_doorkey_agent_modified")
+    # vis_env = gym.make("MiniGrid-DoorKey-5x5-v0", render_mode="rgb_array")
+    # vis_env = MiniWrapper(vis_env, custom_wrapper=new_wrapper)
+    # visualize_agent(agent, vis_env, save_prefix="minigrid_doorkey_agent_modified")
 
 
 if __name__ == "__main__":
