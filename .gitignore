@@ -1,5 +1,7 @@
 videos/
 __pycache__/
+runs/
+wandb/
 log.txt
 
 logs/
