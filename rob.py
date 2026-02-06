@@ -1,35 +1,29 @@
-# from gymnasium.wrappers import NormalizeObservation, NormalizeReward
-# import numpy as np
-import robosuite as suite
-from robosuite.controllers import load_composite_controller_config
-from robosuite.wrappers import GymWrapper
-from stable_baselines3 import SAC
+import gymnasium as gym
+import panda_gym
+from stable_baselines3 import HerReplayBuffer
+from sb3_contrib import TQC
 from stable_baselines3.common.callbacks import CheckpointCallback
-from stable_baselines3.common.vec_env import VecNormalize
+from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize, VecVideoRecorder
 from stable_baselines3.common.env_util import make_vec_env
 import wandb
 from wandb.integration.sb3 import WandbCallback
-
-def make_env(horizon: int = 1000, render: bool = False):
-
-    controller_config = load_composite_controller_config(controller="BASIC", robot="Panda")
-    for key in ["left", "torso", "head", "base", "legs", "left", "torso", "head", "base", "legs"]:
-        controller_config["body_parts"].pop(key, None)
-
-    return GymWrapper(suite.make(
-        env_name="Lift",
-        robots="Panda",
-        controller_configs=controller_config,
-        has_renderer=render,
-        reward_shaping=True,
-        has_offscreen_renderer=False,
-        use_camera_obs=False,
-        horizon=horizon,
-        control_freq=20
-    ))
+import yaml
 
 
-def train(total_timesteps: int = 500_000):
+def load_zoo_params(param_path: str):
+    params = {}
+    with open(param_path, "r", encoding="utf-8") as f:
+        params = yaml.safe_load(f)
+
+    config = params["PandaReach-v1"]
+    config["replay_buffer_class"] = HerReplayBuffer
+    n_timesteps = config.pop("n_timesteps")
+    policy = config.pop("policy")
+    normalize = config.pop("normalize")
+    return config, policy, n_timesteps, normalize
+
+
+def train(save_path: str, total_timesteps: int, save_freq: int, n_envs: int):
     run = wandb.init(
         project="robosuite",
         sync_tensorboard=True
@@ -37,48 +31,71 @@ def train(total_timesteps: int = 500_000):
 
     print("Creating env...")
     n_envs = 16
-    env = make_vec_env(make_env, env_kwargs={"horizon": 1000, "render": False}, n_envs=n_envs, seed=42)
+    env = make_vec_env("PandaReach-v3", n_envs=n_envs, seed=42)
     env = VecNormalize(env, training=True, norm_obs=True, norm_reward=True)
 
     print("Creating model...")
-    model = SAC("MlpPolicy", env, tensorboard_log=f"runs/{run.id}", verbose=1)
+    config, policy, n_timesteps, normalize = load_zoo_params("hyperparams.yaml")
+    print(config)
+    model = TQC(policy, env, tensorboard_log=f"runs/{run.id}", verbose=0, **config)
     checkpoint_callback = CheckpointCallback(
-        save_freq=max(1, 50_000 // n_envs),
-        save_path='models/robosuite_lift',
-        name_prefix='robosuite_lift_checkpoint',
+        save_freq=max(1, save_freq // n_envs),
+        save_path=save_path,
+        name_prefix='checkpoint',
         save_vecnormalize=True,
         verbose=2
     )
     wandb_callback = WandbCallback(
-        verbose=1
+        verbose=0
     )
 
-    print("Training...")
     model.learn(total_timesteps=total_timesteps, callback=[checkpoint_callback, wandb_callback])
     # model.save("models/robosuite_lift/final.zip")
 
 
-def eval():
+def eval(video_save_path: str, n_repeats: int, model_save_path: str, vecnormalize_save_path: str):
+    # config, policy, n_timesteps, normalize = load_zoo_params("hyperparams.yaml")
 
-    model = SAC.load("models/robosuite_lift/model.zip")
+    vis_env = DummyVecEnv([lambda: gym.make("PandaReach-v3", render_mode="rgb_array")])
+    vis_env = VecNormalize.load(vecnormalize_save_path, vis_env)
 
-    vis_env = make_env(horizon=1000, render=True)
+    vis_env.training = False
+    vis_env.norm_reward = False
+    vis_env = VecVideoRecorder(vis_env, "videos", record_video_trigger=lambda x: True, name_prefix=video_save_path)
 
-    obs, info = vis_env.reset()
-    done = False
-    total_reward = 0
-    while not done:
-        action = model.predict(obs, deterministic=True)[0]
-        obs, reward, done, truncated, info = vis_env.step(action)
-        total_reward += reward
-        vis_env.render()  # render the environment
+    model = TQC.load(model_save_path, env=vis_env)
 
-    print("Total Reward:", total_reward)
+    # 5. Run the Evaluation Loop
+    total_success = 0
+    for episode in range(n_repeats):
+        obs = vis_env.reset()
+        done = False
+
+        print("Recording video...")
+
+        # We use a simple loop, but because we are using VecEnv, 'done' is technically
+        # an array of booleans. For a single env, we check done[0].
+        while True:
+            action, _ = model.predict(obs, deterministic=True)
+            obs, reward, done, info = vis_env.step(action)
+
+            if done[0] or info[0].get("is_success", False):
+                if info[0].get("is_success", False):
+                    total_success += 1
+                break
+
+    vis_env.close() # Important to ensure the video file writes completely
+    print(f"success rate: {total_success / n_repeats}")
 
 
 def main():
-    train()
-    # eval()
+    # train(save_path="models/panda_sparse2", total_timesteps=200_000, save_freq=20_000, n_envs=16)
+    eval(
+        "panda_sparse2",
+        10,
+        "models/panda_sparse2/checkpoint_200000_steps.zip",
+        "models/panda_sparse2/checkpoint_vecnormalize_200000_steps.pkl"
+    )
 
 
 if __name__ == "__main__":
