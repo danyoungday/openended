@@ -1,15 +1,20 @@
-import numpy as np
+# from gymnasium.wrappers import NormalizeObservation, NormalizeReward
+# import numpy as np
 import robosuite as suite
 from robosuite.controllers import load_composite_controller_config
 from robosuite.wrappers import GymWrapper
 from stable_baselines3 import SAC
+from stable_baselines3.common.callbacks import CheckpointCallback
+from stable_baselines3.common.vec_env import VecNormalize
 from stable_baselines3.common.env_util import make_vec_env
 import wandb
 from wandb.integration.sb3 import WandbCallback
 
 def make_env(horizon: int = 1000, render: bool = False):
 
-    controller_config = load_composite_controller_config(controller="BASIC")
+    controller_config = load_composite_controller_config(controller="BASIC", robot="Panda")
+    for key in ["left", "torso", "head", "base", "legs", "left", "torso", "head", "base", "legs"]:
+        controller_config["body_parts"].pop(key, None)
 
     return GymWrapper(suite.make(
         env_name="Lift",
@@ -24,24 +29,33 @@ def make_env(horizon: int = 1000, render: bool = False):
     ))
 
 
-def train():
-
+def train(total_timesteps: int = 500_000):
     run = wandb.init(
         project="robosuite",
         sync_tensorboard=True
     )
 
-    env = make_vec_env(make_env, env_kwargs={"horizon": 1000, "render": False}, n_envs=8, seed=42)
+    print("Creating env...")
+    n_envs = 16
+    env = make_vec_env(make_env, env_kwargs={"horizon": 1000, "render": False}, n_envs=n_envs, seed=42)
+    env = VecNormalize(env, training=True, norm_obs=True, norm_reward=True)
 
-    model = SAC("MlpPolicy", env, tensorboard_log=f"runs/{run.id}")
-    callback = WandbCallback(
-        model_save_path="models/robosuite_lift",
-        model_save_freq=50_000,
-        gradient_save_freq=100,
+    print("Creating model...")
+    model = SAC("MlpPolicy", env, tensorboard_log=f"runs/{run.id}", verbose=1)
+    checkpoint_callback = CheckpointCallback(
+        save_freq=max(1, 50_000 // n_envs),
+        save_path='models/robosuite_lift',
+        name_prefix='robosuite_lift_checkpoint',
+        save_vecnormalize=True,
+        verbose=2
+    )
+    wandb_callback = WandbCallback(
         verbose=1
     )
-    model.learn(total_timesteps=1_000_000, callback=callback)
-    model.save("models/robosuite_lift/final.zip")
+
+    print("Training...")
+    model.learn(total_timesteps=total_timesteps, callback=[checkpoint_callback, wandb_callback])
+    # model.save("models/robosuite_lift/final.zip")
 
 
 def eval():
@@ -64,7 +78,7 @@ def eval():
 
 def main():
     train()
-    eval()
+    # eval()
 
 
 if __name__ == "__main__":

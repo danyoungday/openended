@@ -1,8 +1,10 @@
 videos/
 __pycache__/
+.vscode/
 runs/
 wandb/
 log.txt
 
 logs/
 models/
+nohup.out
